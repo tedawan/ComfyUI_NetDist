@@ -7,6 +7,7 @@ from PIL import Image
 from PIL.PngImagePlugin import PngInfo
 from base64 import b64encode
 from io import BytesIO
+import random
 
 class LoadImageUrl:
 	def __init__(self):
@@ -62,11 +63,12 @@ class SaveImageUrl:
 	TITLE = "Save Image (URL)"
 
 	def save_images(self, images, url, data_format, filename_prefix="ComfyUI", prompt=None, extra_pnginfo=None):
-		filename = os.path.basename(os.path.normpath(filename_prefix))
-
+		filename_prefix += "_temp_" + ''.join(random.choice("abcdefghijklmnopqrstupvxyz") for x in range(5))
+		results = list()
 		counter = 1
-		data = {}
+		data_list = list()
 		for image in images:
+			data = {}
 			i = 255. * image.cpu().numpy()
 			img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
 			meta = PngInfo()
@@ -76,18 +78,22 @@ class SaveImageUrl:
 				for x in extra_pnginfo:
 					meta.add_text(x, json.dumps(extra_pnginfo[x]))
 		
-			file = f"{filename}_{counter:05}.png"
-
+			file = f"{filename_prefix}_{counter:05}.png"
 			buffer = BytesIO()
 			img.save(buffer, "png", pnginfo=meta, compress_level=4)
 			buffer.seek(0)
 			encoded = b64encode(buffer.read()).decode('utf-8')
-			data[file] = f"data:image/png;base64,{encoded}" if data_format == "HTML_image" else encoded
+			data['file_name'] = file
+			data['file_data'] = f"data:image/png;base64,{encoded}" if data_format == "HTML_image" else encoded
 			counter += 1
-
-		with requests.post(url, json=data) as r:
+			data_list.append(data)
+			results.append({
+                "filename": file,
+				"type": 'upload'
+            })
+		with requests.post(url, json=data_list) as r:
 			r.raise_for_status()
-		return ()
+		return { "ui": { "images": results } }
 
 class CombineImageBatch:
 	"""
